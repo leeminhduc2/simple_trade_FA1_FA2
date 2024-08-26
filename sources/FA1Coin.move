@@ -285,32 +285,52 @@ module leeminhduc2::fa_coin {
         borrow_global<ManagedFungibleAsset2>(object::object_address(&asset))
     }
 
-    public entry fun trade_FA1_to_FA2(admin : &signer, user : address, amount : u64) acquires ManagedFungibleAsset, ManagedFungibleAsset2 { 
-        burn(admin, user,amount);
-        mint2(admin,user,amount);
+    public entry fun trade_FA1_to_FA2(admin : &signer, user : address, amount : u64) acquires ManagedFungibleAsset, ManagedFungibleAsset2, State, State2 {
+        let admin_addr = signer::address_of(admin);
+        //Transfer FA1 to the pool
+        transfer(admin,user,admin_addr,amount);
+        //If the pool is insufficient, mint more FA2 
+        let fa2_metadata = get_metadata2();
+        let admin_amount2 = primary_fungible_store::balance(admin_addr,fa2_metadata);
+        if (admin_amount2 < amount) 
+            mint2(admin,admin_addr,amount - admin_amount2);
+        transfer2(admin,admin_addr,user,amount);
     }
 
-    public entry fun trade_FA2_to_FA1(admin : &signer, user : address, amount : u64) acquires ManagedFungibleAsset, ManagedFungibleAsset2 { 
-        burn2(admin, user,amount);
-        mint(admin,user,amount);
+    public entry fun trade_FA2_to_FA1(admin : &signer, user : address, amount : u64) acquires ManagedFungibleAsset, ManagedFungibleAsset2, State, State2 {
+         
+        let admin_addr = signer::address_of(admin);
+        //Transfer FA2 to the pool
+        transfer2(admin,user,admin_addr,amount);
+        //If the pool is insufficient, mint more FA1 
+        let fa1_metadata = get_metadata();
+        let admin_amount = primary_fungible_store::balance(admin_addr,fa1_metadata);
+        if (admin_amount < amount) 
+            mint(admin,admin_addr,amount - admin_amount);
+        transfer(admin,admin_addr,user,amount);
     }
 
     #[test(admin = @leeminhduc2,user = @0xCAFE)]  
-    fun test_trade(admin : &signer, user : address) acquires ManagedFungibleAsset, ManagedFungibleAsset2 {
+    fun test_trade(admin : &signer, user : address) acquires ManagedFungibleAsset, ManagedFungibleAsset2, State, State2 {
+        // Initialize the two FA Coin types
         init_module(admin);
         init_module2(admin);
+        // Mint 1000 FA1 Coin to the user (for testing)
         mint(admin,user,1000);
+        // Trade 1000 FA1 Coin to 1000 FA2 Coin (or Stake or sth, idk mr Viet)
         trade_FA1_to_FA2(admin,user,1000);
+        // Get metadata from the two FA Coin types
         let asset = get_metadata();
         let asset2 = get_metadata2();
-        let admin_addr =signer::address_of(admin);
-         let admin_wallet = primary_fungible_store::ensure_primary_store_exists(admin_addr, asset);
-         let user_wallet = primary_fungible_store::ensure_primary_store_exists(user, asset2);
-         assert!(fungible_asset::balance(admin_wallet) == 0,1);
-         assert!(fungible_asset::balance(user_wallet) == 1000,2);
+        let admin_addr = signer::address_of(admin);
+        // Check balance of the two FA Coin types of the user and the admin (which is the pool account)
+        assert!(primary_fungible_store::balance(user,asset) == 0,1);
+        assert!(primary_fungible_store::balance(user,asset2) == 1000,2);
+        assert!(primary_fungible_store::balance(admin_addr,asset) == 1000,3);
+        assert!(primary_fungible_store::balance(admin_addr,asset2) == 0,4);
     
         
     }
 
     
-}
+}        
